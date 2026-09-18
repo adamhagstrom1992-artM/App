@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% from "_macros.html" import change %}
+{% block title %}Portfölj – Aktiekoll{% endblock %}
+{% block content %}
+<h1>Portfölj</h1>
+<p class="lead">Innehaven är uträknade ur dina transaktioner med genomsnittsmetoden, så GAV
+inkluderar courtage och påverkas inte av försäljningar.</p>
+
+<div class="grid">
+  <div class="stat"><div class="k">Marknadsvärde</div><div class="v">{{ ov.totals.market_value|kr }}</div></div>
+  <div class="stat"><div class="k">Omkostnadsbelopp</div><div class="v">{{ ov.totals.cost_basis|kr }}</div></div>
+  <div class="stat">
+    <div class="k">Orealiserat</div>
+    <div class="v {{ 'pos' if ov.totals.unrealized_pl >= 0 else 'neg' }}">{{ ov.totals.unrealized_pl|kr }}</div>
+  </div>
+  <div class="stat">
+    <div class="k">Totalavkastning</div>
+    <div class="v {{ 'pos' if ov.totals.total_return >= 0 else 'neg' }}">{{ ov.totals.total_return|kr }}</div>
+    <div class="small muted">inkl. utdelning och realiserat</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:20px">
+  <h2>Innehav <span class="sub">{{ ov.held|length }} st</span></h2>
+  {% if ov.held %}
+  <div class="table-wrap"><table>
+    <thead><tr>
+      <th class="l">Aktie</th><th>Antal</th><th>GAV</th><th>Kurs</th>
+      <th>Värde</th><th>Orealiserat</th><th>Utd. på GAV</th><th>Vikt</th>
+    </tr></thead>
+    <tbody>
+      {% for r in ov.held %}
+      {% set pl = r.position.unrealized_pl(r.price_base) %}
+      <tr>
+        <td class="l"><a href="/aktie/{{ r.ticker }}">{{ r.name }}</a>
+            <span class="muted small">{{ r.ticker }}</span></td>
+        <td>{{ r.position.quantity|num(0) }} st</td>
+        <td>{{ r.position.avg_cost|num }}</td>
+        <td>{{ r.price_base|num }}</td>
+        <td>{{ r.value_base|kr }}</td>
+        <td>
+          {% if pl is not none %}
+            <span class="{{ 'pos' if pl >= 0 else 'neg' }}">{{ pl|kr }}</span>
+            <span class="muted small">{{ r.position.unrealized_pct(r.price_base)|spct }}</span>
+          {% else %}<span class="muted">–</span>{% endif %}
+        </td>
+        <td>{{ r.position.yield_on_cost(r.quote.dividend_per_share if r.quote else none)|pct }}</td>
+        <td>
+          {{ r.weight|pct(0) }}
+          <div class="bar"><i style="width: {{ (r.weight * 100)|round(1) }}%"></i></div>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <div class="empty">Inga innehav än. <a href="/transaktioner">Registrera ett köp →</a></div>
+  {% endif %}
+</div>
+
+{% set warnings = ov.rows | selectattr('position') | map(attribute='position.warnings') | select | list %}
+{% if warnings %}
+<div class="card">
+  <h2>Varningar i transaktionshistoriken</h2>
+  <ul class="small muted" style="margin:0; padding-left:18px">
+    {% for group in warnings %}{% for w in group %}<li>{{ w }}</li>{% endfor %}{% endfor %}
+  </ul>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block title %}Inställningar – Aktiekoll{% endblock %}
+{% block content %}
+<h1>Inställningar</h1>
+<p class="lead">Dina köpregler. De styr checklistan på varje aktie och vad köpplanen föreslår –
+ändra dem medvetet, inte för att marknaden råkar gå emot dig.</p>
+
+<form method="post" action="/installningar">
+  <div class="card">
+    <h2>Krav på bolaget</h2>
+    <div class="inline">
+      <div class="field"><label>Lägsta direktavkastning (%)</label>
+        <input name="min_dividend_yield" inputmode="decimal"
+               value="{{ (settings.min_dividend_yield|float * 100)|round(2) }}"></div>
+      <div class="field"><label>Högsta P/E-tal</label>
+        <input name="max_pe" inputmode="decimal" value="{{ settings.max_pe }}"></div>
+      <div class="field"><label>Största andel per innehav (%)</label>
+        <input name="max_position_pct" inputmode="decimal"
+               value="{{ (settings.max_position_pct|float * 100)|round(2) }}"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Courtage och budget</h2>
+    <div class="inline">
+      <div class="field"><label>Minimicourtage (kr)</label>
+        <input name="courtage_min" inputmode="decimal" value="{{ settings.courtage_min }}"></div>
+      <div class="field"><label>Courtage (%)</label>
+        <input name="courtage_pct" inputmode="decimal"
+               value="{{ (settings.courtage_pct|float * 100)|round(3) }}"></div>
+      <div class="field"><label>Max courtage per order (%)</label>
+        <input name="max_courtage_pct_of_order" inputmode="decimal"
+               value="{{ (settings.max_courtage_pct_of_order|float * 100)|round(3) }}"></div>
+      <div class="field"><label>Månadsbudget (kr)</label>
+        <input name="monthly_budget" inputmode="decimal" value="{{ settings.monthly_budget }}"></div>
+    </div>
+    <p class="small muted" style="margin:12px 0 0">
+      Courtagespärren hoppar över för små order – köper du för 500 kr med 39 kr i minimicourtage
+      betalar du 7,8 % i avgift innan aktien ens rört sig.
+    </p>
+  </div>
+
+  <button type="submit">Spara inställningar</button>
+</form>
+{% endblock %}

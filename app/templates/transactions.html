@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% block title %}Transaktioner – Aktiekoll{% endblock %}
+{% block content %}
+<h1>Transaktioner</h1>
+<p class="lead">Allt du äger räknas fram härifrån. Registrera köp, försäljningar,
+utdelningar och splittar – GAV och realiserat resultat uppdateras automatiskt.</p>
+
+<div class="card">
+  <h2>Ny transaktion</h2>
+  <form class="inline" method="post" action="/transaktioner">
+    <div class="field narrow"><label>Typ</label>
+      <select name="kind">
+        <option value="BUY">Köp</option>
+        <option value="SELL">Sälj</option>
+        <option value="DIVIDEND">Utdelning</option>
+        <option value="SPLIT">Split</option>
+      </select></div>
+    <div class="field"><label>Ticker</label><input name="ticker" placeholder="VOLV-B.ST" required></div>
+    <div class="field"><label>Datum</label><input name="trade_date" type="date" value="{{ today }}" required></div>
+    <div class="field narrow"><label>Antal</label><input name="quantity" placeholder="10" inputmode="decimal"></div>
+    <div class="field narrow"><label>Kurs</label><input name="price" placeholder="250" inputmode="decimal"></div>
+    <div class="field narrow"><label>Courtage</label><input name="fee" placeholder="39" inputmode="decimal"></div>
+    <div class="field"><label>Notering</label><input name="note" placeholder="valfritt"></div>
+    <button type="submit">Spara</button>
+  </form>
+  <p class="small muted" style="margin:12px 0 0">
+    <strong>Utdelning:</strong> ange belopp per aktie som kurs; lämna antal tomt så används
+    hela innehavet. <strong>Split:</strong> ange kvoten som antal – 2 betyder 2:1.
+  </p>
+</div>
+
+<div class="card">
+  <h2>Historik <span class="sub">{{ txns|length }} poster</span></h2>
+  {% if txns %}
+  <div class="table-wrap"><table>
+    <thead><tr>
+      <th class="l">Datum</th><th class="l">Typ</th><th class="l">Aktie</th>
+      <th>Antal</th><th>Kurs</th><th>Courtage</th><th>Belopp</th><th class="l">Notering</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for t in txns %}
+      <tr>
+        <td class="l">{{ t.trade_date }}</td>
+        <td class="l">
+          {% if t.kind == 'BUY' %}<span class="tag tag-buy">Köp</span>
+          {% elif t.kind == 'SELL' %}<span class="tag tag-hold">Sälj</span>
+          {% elif t.kind == 'DIVIDEND' %}<span class="tag tag-watch">Utdelning</span>
+          {% else %}<span class="tag tag-unknown">Split</span>{% endif %}
+        </td>
+        <td class="l"><a href="/aktie/{{ t.ticker }}">{{ t.ticker }}</a></td>
+        <td>{% if t.kind == 'SPLIT' %}{{ t.quantity|num(2) }}:1
+            {%- elif t.quantity %}{{ t.quantity|num(0) }}
+            {%- else %}<span class="muted">hela innehavet</span>{% endif %}</td>
+        <td>{{ t.price|num if t.kind != 'SPLIT' else '–' }}</td>
+        <td class="muted">{{ t.fee|num(0) }}</td>
+        <td>{{ (t.quantity * t.price)|kr if t.kind in ('BUY', 'SELL', 'DIVIDEND') else '–' }}</td>
+        <td class="l muted small">{{ t.note }}</td>
+        <td>
+          <form method="post" action="/transaktioner/{{ t.id }}/ta-bort" class="row-actions">
+            <button class="link" type="submit">Ta bort</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <div class="empty">Inga transaktioner än.</div>
+  {% endif %}
+</div>
+{% endblock %}

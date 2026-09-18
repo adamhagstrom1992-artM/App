@@ -1,0 +1,31 @@
+{% macro verdict(a) %}
+  {% if a is none %}<span class="tag tag-unknown">Okänd</span>
+  {% elif a.verdict == VERDICT_BUY %}<span class="tag tag-buy">Köpvärd</span>
+  {% elif a.verdict == VERDICT_HOLD %}<span class="tag tag-hold">Avvakta</span>
+  {% elif a.verdict == VERDICT_WATCH %}<span class="tag tag-watch">Bevaka</span>
+  {% else %}<span class="tag tag-unknown">Okänd</span>{% endif %}
+{% endmacro %}
+
+{% macro change(value) %}
+  {% if value is none %}<span class="muted">–</span>
+  {% else %}<span class="{{ 'pos' if value >= 0 else 'neg' }}">{{ value|spct }}</span>{% endif %}
+{% endmacro %}
+
+{% macro money(value, decimals=0) %}
+  {% if value is none %}<span class="muted">–</span>
+  {% else %}<span class="{{ 'pos' if value > 0 else ('neg' if value < 0 else '') }}">{{ value|kr(decimals) }}</span>{% endif %}
+{% endmacro %}
+
+{% macro checklist(a) %}
+<ul class="checks">
+  {% for c in a.checks %}
+  <li>
+    <span class="mark {{ 'ok' if c.ok else ('bad' if c.ok is false else 'na') }}">
+      {{ '✓' if c.ok else ('✕' if c.ok is false else '–') }}
+    </span>
+    <span class="lbl">{{ c.label }}{% if c.blocking %} <span class="muted small">(krav)</span>{% endif %}</span>
+    <span class="det">{{ c.detail }}</span>
+  </li>
+  {% endfor %}
+</ul>
+{% endmacro %}

@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "_macros.html" import verdict, change %}
+{% block title %}Bevakning – Aktiekoll{% endblock %}
+{% block content %}
+<h1>Bevakning</h1>
+<p class="lead">Sätt en köpgräns och en önskad portföljandel per aktie. Gränsen är priset du
+i förväg bestämt dig för att betala – den gör köpbeslutet till en regel istället för en impuls.</p>
+
+<div class="card">
+  <h2>Lägg till eller uppdatera</h2>
+  <form class="inline" method="post" action="/bevakning">
+    <div class="field"><label>Ticker</label>
+      <input name="ticker" placeholder="VOLV-B.ST" required></div>
+    <div class="field narrow"><label>Önskad andel %</label>
+      <input name="target_weight" placeholder="10" inputmode="decimal"></div>
+    <div class="field narrow"><label>Köpgräns</label>
+      <input name="max_buy_price" placeholder="250" inputmode="decimal"></div>
+    <div class="field wide"><label>Varför (din tes)</label>
+      <input name="thesis" placeholder="Stabil utdelare, köper under 250"></div>
+    <button type="submit">Spara</button>
+  </form>
+  <p class="small muted" style="margin:12px 0 0">
+    Stockholmsbörsen: <code>VOLV-B.ST</code>, <code>INVE-B.ST</code>. USA: <code>AAPL</code>.
+    Köpgränsen anges i aktiens egen valuta.
+  </p>
+</div>
+
+<div class="card">
+  <h2>Bevakade <span class="sub">{{ ov.watched|length }} st</span></h2>
+  {% if ov.watched %}
+  <div class="table-wrap"><table>
+    <thead><tr>
+      <th class="l">Aktie</th><th>Kurs</th><th>Idag</th><th>Köpgräns</th><th>Till gräns</th>
+      <th>Mål</th><th>Nu</th><th class="l">Omdöme</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for r in ov.watched %}
+      <tr>
+        <td class="l">
+          <a href="/aktie/{{ r.ticker }}">{{ r.name }}</a>
+          <span class="muted small">{{ r.ticker }}</span>
+          {% if r.watch['thesis'] %}<div class="muted small">{{ r.watch['thesis'] }}</div>{% endif %}
+        </td>
+        <td>{{ r.price_native|num }} <span class="muted small">{{ r.currency }}</span></td>
+        <td>{{ change(r.quote.change_pct if r.quote else none) }}</td>
+        <td>{{ r.watch['max_buy_price']|num if r.watch['max_buy_price'] else '–' }}</td>
+        <td>
+          {% if r.analysis and r.analysis.upside_to_limit is not none %}
+            <span class="{{ 'pos' if r.analysis.upside_to_limit >= 0 else 'neg' }}">
+              {{ r.analysis.upside_to_limit|spct }}</span>
+          {% else %}<span class="muted">–</span>{% endif %}
+        </td>
+        <td>{{ r.watch['target_weight']|pct(0) }}</td>
+        <td>{{ r.weight|pct(0) }}</td>
+        <td class="l">{{ verdict(r.analysis) }}</td>
+        <td>
+          <form method="post" action="/bevakning/{{ r.ticker }}/ta-bort" class="row-actions">
+            <button class="link" type="submit" title="Ta bort från bevakning">Ta bort</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <div class="empty">Inga bevakade aktier än. Lägg till en ovan.</div>
+  {% endif %}
+</div>
+{% endblock %}

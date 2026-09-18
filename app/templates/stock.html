@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% from "_macros.html" import verdict, change, checklist %}
+{% block title %}{{ row.name if row else ticker }} – Aktiekoll{% endblock %}
+{% block content %}
+{% if row and row.quote %}
+<h1>{{ row.name }} <span class="muted" style="font-weight:400">{{ row.ticker }}</span></h1>
+<p class="lead">{{ row.quote.sector or 'Okänd sektor' }} ·
+  börsvärde {{ row.quote.market_cap|cap }} {{ row.currency }} ·
+  {% if row.watch and row.watch['thesis'] %}{{ row.watch['thesis'] }}{% else %}ingen tes noterad{% endif %}</p>
+
+<div class="grid">
+  <div class="stat">
+    <div class="k">Kurs</div>
+    <div class="v">{{ row.price_native|num }} <span class="small muted">{{ row.currency }}</span></div>
+    <div class="small">{{ change(row.quote.change_pct) }} idag</div>
+  </div>
+  <div class="stat">
+    <div class="k">Din köpgräns</div>
+    <div class="v">{{ row.watch['max_buy_price']|num if row.watch and row.watch['max_buy_price'] else '–' }}</div>
+    {% if row.analysis and row.analysis.upside_to_limit is not none %}
+    <div class="small {{ 'pos' if row.analysis.upside_to_limit >= 0 else 'neg' }}">
+      {{ row.analysis.upside_to_limit|spct }} till gränsen</div>
+    {% endif %}
+  </div>
+  <div class="stat">
+    <div class="k">Direktavkastning</div>
+    <div class="v">{{ row.quote.dividend_yield|pct }}</div>
+    <div class="small muted">{{ row.quote.dividend_per_share|num }} {{ row.currency }}/aktie</div>
+  </div>
+  <div class="stat">
+    <div class="k">P/E</div>
+    <div class="v">{{ row.quote.pe|num(1) if row.quote.pe else '–' }}</div>
+    <div class="small muted">vinst/aktie {{ row.quote.eps|num }}</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:20px">
+  <h2>Mot dina regler <span class="sub">{{ verdict(row.analysis) }}</span></h2>
+  {{ checklist(row.analysis) }}
+  {% if row.analysis.fair_value %}
+  <p class="small muted" style="margin:14px 0 0">
+    Ditt P/E-tak motsvarar en kurs på {{ row.analysis.fair_value|num }} {{ row.currency }}
+    vid nuvarande vinst per aktie. Det är vad dina egna regler säger, inte en riktkurs.
+  </p>
+  {% endif %}
+</div>
+
+{% if row.is_held %}
+<div class="card">
+  <h2>Ditt innehav</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th class="l">Antal</th><th>GAV</th><th>Värde</th><th>Orealiserat</th>
+      <th>Utdelningar</th><th>Utd. på GAV</th><th>Vikt</th></tr></thead>
+    <tbody><tr>
+      <td class="l">{{ row.position.quantity|num(0) }} st</td>
+      <td>{{ row.position.avg_cost|num }}</td>
+      <td>{{ row.value_base|kr }}</td>
+      {% set pl = row.position.unrealized_pl(row.price_base) %}
+      <td class="{{ 'pos' if pl and pl >= 0 else 'neg' }}">{{ pl|kr }}
+        <span class="muted small">{{ row.position.unrealized_pct(row.price_base)|spct }}</span></td>
+      <td>{{ row.position.dividends|kr }}</td>
+      <td>{{ row.position.yield_on_cost(row.quote.dividend_per_share)|pct }}</td>
+      <td>{{ row.weight|pct }}</td>
+    </tr></tbody>
+  </table></div>
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Transaktioner <span class="sub">{{ txns|length }} st</span></h2>
+  {% if txns %}
+  <div class="table-wrap"><table>
+    <thead><tr><th class="l">Datum</th><th class="l">Typ</th><th>Antal</th><th>Kurs</th><th>Courtage</th></tr></thead>
+    <tbody>
+      {% for t in txns %}
+      <tr><td class="l">{{ t.trade_date }}</td>
+          <td class="l">{{ KIND_LABEL.get(t.kind, t.kind) }}</td>
+          <td>{% if t.kind == 'SPLIT' %}{{ t.quantity|num(2) }}:1
+              {%- elif t.quantity %}{{ t.quantity|num(0) }}
+              {%- else %}<span class="muted">hela innehavet</span>{% endif %}</td>
+          <td>{{ t.price|num }}</td>
+          <td class="muted">{{ t.fee|num(0) }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <div class="empty">Inga transaktioner i den här aktien.</div>
+  {% endif %}
+</div>
+
+{% else %}
+<h1>{{ ticker }}</h1>
+<div class="card">
+  <div class="empty">
+    Hittade ingen kursdata för <strong>{{ ticker }}</strong>.<br>
+    Stockholmsbörsen skrivs med ändelsen <code>.ST</code>, till exempel <code>VOLV-B.ST</code>.
+    {% if source == 'demo' %}<br>Appen kör dessutom i demoläge, där bara ett fåtal tickers finns.{% endif %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}

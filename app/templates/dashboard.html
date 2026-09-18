@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% from "_macros.html" import verdict, change, money %}
+{% block title %}Översikt – Aktiekoll{% endblock %}
+{% block content %}
+<h1>Översikt</h1>
+<p class="lead">Vad portföljen är värd, vilka bevakade aktier som passerar dina krav just nu,
+och vad månadens budget räcker till.</p>
+
+<div class="grid">
+  <div class="stat"><div class="k">Marknadsvärde</div><div class="v">{{ ov.totals.market_value|kr }}</div></div>
+  <div class="stat">
+    <div class="k">Orealiserat</div>
+    <div class="v {{ 'pos' if ov.totals.unrealized_pl >= 0 else 'neg' }}">
+      {{ ov.totals.unrealized_pl|kr }}
+    </div>
+    <div class="small muted">{{ ov.totals.unrealized_pct|spct }} mot omkostnadsbelopp</div>
+  </div>
+  <div class="stat"><div class="k">Utdelningar</div><div class="v">{{ ov.totals.dividends|kr }}</div></div>
+  <div class="stat">
+    <div class="k">Realiserat</div>
+    <div class="v {{ 'pos' if ov.totals.realized_pl >= 0 else 'neg' }}">{{ ov.totals.realized_pl|kr }}</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:20px">
+  <h2>Passerar dina krav <span class="sub">{{ ov.buy_signals|length }} av {{ ov.watched|length }} bevakade</span></h2>
+  {% if ov.buy_signals %}
+  <div class="table-wrap"><table>
+    <thead><tr>
+      <th class="l">Aktie</th><th>Kurs</th><th>Idag</th><th>Din gräns</th>
+      <th>Dir.avk.</th><th>P/E</th><th class="l">Omdöme</th>
+    </tr></thead>
+    <tbody>
+      {% for r in ov.buy_signals %}
+      <tr>
+        <td class="l"><a href="/aktie/{{ r.ticker }}">{{ r.name }}</a>
+            <span class="muted small">{{ r.ticker }}</span></td>
+        <td>{{ r.price_native|num }} {{ r.currency }}</td>
+        <td>{{ change(r.quote.change_pct if r.quote else none) }}</td>
+        <td>{{ r.watch['max_buy_price']|num if r.watch and r.watch['max_buy_price'] else '–' }}</td>
+        <td>{{ r.quote.dividend_yield|pct if r.quote else '–' }}</td>
+        <td>{{ r.quote.pe|num(1) if r.quote and r.quote.pe else '–' }}</td>
+        <td class="l">{{ verdict(r.analysis) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <div class="empty">
+    Ingen bevakad aktie uppfyller alla dina krav just nu.
+    {% if not ov.watched %}<br><a href="/bevakning">Lägg till något att bevaka →</a>{% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Månadens köpplan <span class="sub">budget {{ budget|kr }}</span></h2>
+  {% if plan.orders %}
+  <div class="table-wrap"><table>
+    <thead><tr><th class="l">Aktie</th><th>Antal</th><th>Kurs</th><th>Belopp</th><th>Courtage</th><th>Vikt efter</th></tr></thead>
+    <tbody>
+      {% for o in plan.orders %}
+      <tr>
+        <td class="l"><a href="/aktie/{{ o.ticker }}">{{ o.name }}</a></td>
+        <td>{{ o.shares }} st</td>
+        <td>{{ o.price|num }}</td>
+        <td>{{ o.amount|kr }}</td>
+        <td class="muted">{{ o.courtage|kr(2) }}</td>
+        <td>{{ o.weight_after|pct }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  <p class="small muted" style="margin-bottom:0">
+    Summa {{ plan.spent|kr(2) }}, kvar {{ plan.leftover|kr(2) }}.
+    <a href="/plan">Se hela planen →</a>
+  </p>
+  {% else %}
+  <div class="empty">Inga köp föreslås med nuvarande regler och budget.
+    <a href="/plan">Se varför →</a></div>
+  {% endif %}
+</div>
+
+{% if ov.missing %}
+<div class="card">
+  <h2>Saknar kursdata</h2>
+  <p class="small muted" style="margin:0">
+    {{ ov.missing|join(', ') }} – kontrollera stavningen. Stockholmsbörsen skrivs med
+    ändelsen <code>.ST</code>, till exempel <code>VOLV-B.ST</code>.
+  </p>
+</div>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Aktiekoll{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header class="top">
+  <div class="topbar">
+    <div class="brand">Aktie<span>koll</span></div>
+    <nav>
+      <a href="/" class="{{ 'active' if path == '/' }}">Oversikt</a>
+      <a href="/bevakning" class="{{ 'active' if path.startswith('/bevakning') }}">Bevakning</a>
+      <a href="/portfolj" class="{{ 'active' if path.startswith('/portfolj') }}">Portfölj</a>
+      <a href="/plan" class="{{ 'active' if path.startswith('/plan') }}">Köpplan</a>
+      <a href="/transaktioner" class="{{ 'active' if path.startswith('/transaktioner') }}">Transaktioner</a>
+      <a href="/installningar" class="{{ 'active' if path.startswith('/installningar') }}">Inställningar</a>
+    </nav>
+    <form method="post" action="/uppdatera-kurser">
+      <button class="ghost" type="submit">Uppdatera kurser</button>
+    </form>
+  </div>
+</header>
+
+<main>
+  {% if source == 'demo' %}
+  <div class="banner">
+    <strong>Demoläge.</strong> Ingen kontakt med Yahoo Finance, så appen visar påhittade
+    testsiffror. Kurserna nedan är <em>inte</em> verkliga. Starta om appen när du har
+    nätverk, så hämtas skarp data automatiskt.
+  </div>
+  {% endif %}
+  {% block content %}{% endblock %}
+
+  <p class="disclaimer">
+    Aktiekoll är ett personligt beslutsstöd, inte finansiell rådgivning. Appen lägger inga
+    order – den räknar fram ett underlag som du själv tar ställning till och utför hos din
+    mäklare. Kursdata kan vara fördröjd eller felaktig; kontrollera alltid hos mäklaren
+    innan du handlar.
+  </p>
+</main>
+</body>
+</html>

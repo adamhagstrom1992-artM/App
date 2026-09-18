@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Köpplan – Aktiekoll{% endblock %}
+{% block content %}
+<h1>Köpplan</h1>
+<p class="lead">Budgeten fördelas på de bevakade aktier som ligger längst under sin önskade
+andel – och som samtidigt handlas under din köpgräns. Bara hela aktier, och courtaget är
+inräknat.</p>
+
+<div class="card">
+  <form class="inline" method="get" action="/plan">
+    <div class="field"><label>Budget att investera</label>
+      <input name="budget" value="{{ budget|num(0) }}" inputmode="decimal"></div>
+    <button type="submit">Räkna om</button>
+    <a href="/plan.txt?budget={{ budget }}" style="align-self:flex-end;padding-bottom:9px">Som textlista</a>
+  </form>
+</div>
+
+<div class="card">
+  <h2>Förslag <span class="sub">{{ plan.orders|length }} order</span></h2>
+  {% if plan.orders %}
+  <div class="table-wrap"><table>
+    <thead><tr>
+      <th class="l">Aktie</th><th>Antal</th><th>Kurs</th><th>Belopp</th>
+      <th>Courtage</th><th>Vikt före</th><th>Vikt efter</th>
+    </tr></thead>
+    <tbody>
+      {% for o in plan.orders %}
+      <tr>
+        <td class="l"><a href="/aktie/{{ o.ticker }}">{{ o.name }}</a>
+            <span class="muted small">{{ o.ticker }}</span></td>
+        <td>{{ o.shares }} st</td>
+        <td>{{ o.price|num }}</td>
+        <td>{{ o.amount|kr }}</td>
+        <td class="muted">{{ o.courtage|kr(2) }} <span class="small">({{ o.courtage_pct|pct(2) }})</span></td>
+        <td class="muted">{{ o.weight_before|pct }}</td>
+        <td>{{ o.weight_after|pct }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+    <tfoot><tr>
+      <th class="l">Summa</th><th></th><th></th>
+      <th>{{ plan.spent|kr(2) }}</th>
+      <th class="muted">{{ plan.total_courtage|kr(2) }}</th>
+      <th colspan="2" class="muted">kvar {{ plan.leftover|kr(2) }}</th>
+    </tr></tfoot>
+  </table></div>
+  {% else %}
+  <div class="empty">Inga köp föreslås. Skälen står nedan.</div>
+  {% endif %}
+</div>
+
+{% if plan.leftover > 0.01 and plan.budget %}
+<div class="card">
+  <h2>Varför blir {{ plan.leftover|kr }} över?</h2>
+  <p class="small muted" style="margin:0">
+    Planen köper aldrig mer av en aktie än vad dess målvikt rymmer, och aldrig över din
+    köpgräns. Är pengarna kvar betyder det att dina bevakade aktier antingen redan nått
+    sin önskade andel eller handlas för dyrt just nu. Höj en målvikt, lägg till fler
+    bolag att bevaka – eller låt pengarna ligga kvar tills något blir billigare.
+  </p>
+</div>
+{% endif %}
+
+{% if plan.skipped %}
+<div class="card">
+  <h2>Överhoppade <span class="sub">{{ plan.skipped|length }} st</span></h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th class="l">Aktie</th><th class="l">Skäl</th></tr></thead>
+    <tbody>
+      {% for ticker, why in plan.skipped %}
+      <tr><td class="l"><a href="/aktie/{{ ticker }}">{{ ticker }}</a></td>
+          <td class="l muted">{{ why }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endif %}
+{% endblock %}
