@@ -42,6 +42,28 @@ CREATE TABLE IF NOT EXISTS quote_cache (
     payload    TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS bar_cache (
+    key        TEXT PRIMARY KEY,           -- ticker|intervall|dagar
+    fetched_at TEXT NOT NULL,
+    payload    TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS trade (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticker     TEXT NOT NULL,
+    direction  TEXT NOT NULL CHECK (direction IN ('LONG','SHORT')),
+    setup      TEXT NOT NULL DEFAULT '',   -- din egen benamning pa uppstallningen
+    opened_at  TEXT NOT NULL,
+    closed_at  TEXT,                        -- NULL = affaren ar oppen
+    entry      REAL NOT NULL,
+    stop       REAL NOT NULL,               -- planerad stopp vid ingang, styr R
+    exit       REAL,
+    quantity   REAL NOT NULL,
+    fees       REAL NOT NULL DEFAULT 0,
+    note       TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS trade_opened ON trade(opened_at, id);
+
 CREATE TABLE IF NOT EXISTS setting (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -57,6 +79,13 @@ DEFAULT_SETTINGS = {
     "courtage_pct": "0.0025",       # 0,25 %
     "max_courtage_pct_of_order": "0.005",  # avbryt kop dar courtaget ater mer an 0,5 %
     "monthly_budget": "5000",
+    # Daytrading: kontostorlek och hur mycket av den en enskild affar far riskera.
+    "account_size": "100000",
+    "risk_per_trade_pct": "0.01",
+    "default_interval": "5m",
+    # Intradag begransas av risken, inte av exponeringen: en daytrade kan vara
+    # halva kontot med 1 % risk. Darfor ett eget, hogre tak an langsiktstaket.
+    "max_intraday_position_pct": "0.5",
 }
 
 

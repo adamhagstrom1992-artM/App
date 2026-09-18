@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% block title %}Riskberäknare – Aktiekoll{% endblock %}
+{% block content %}
+<h1>Riskberäknare</h1>
+<p class="lead">Antalet aktier är inte ett val, det är ett resultat: kontostorlek gånger
+risk per affär, delat med avståndet till stoppen. Bestäm var du har fel innan du bestämmer
+hur mycket du köper.</p>
+
+<div class="card">
+  <form class="inline" method="get" action="/risk">
+    <div class="field narrow"><label>Riktning</label>
+      <select name="direction">
+        <option value="LONG" {{ 'selected' if direction == 'LONG' }}>Lång</option>
+        <option value="SHORT" {{ 'selected' if direction == 'SHORT' }}>Kort</option>
+      </select></div>
+    <div class="field"><label>Aktie (valfritt, ger ATR)</label>
+      <input name="ticker" value="{{ ticker }}" placeholder="VOLV-B.ST"></div>
+    <div class="field"><label>Kontostorlek</label>
+      <input name="account" value="{{ account_size|num(0) }}" inputmode="decimal"></div>
+    <div class="field narrow"><label>Risk per affär %</label>
+      <input name="risk" value="{{ (risk_pct * 100)|round(2) }}" inputmode="decimal"></div>
+    <div class="field narrow"><label>Ingång</label>
+      <input name="entry" value="{{ entry|num if entry else '' }}" inputmode="decimal" required></div>
+    <div class="field narrow"><label>Stopp</label>
+      <input name="stop" value="{{ stop|num if stop else '' }}" inputmode="decimal" required></div>
+    <button type="submit">Räkna</button>
+  </form>
+  {% if atr %}
+  <p class="small muted" style="margin:12px 0 0">
+    ATR för {{ ticker }} är {{ atr|num }} – ett stopp på ungefär 1–2 ATR från ingången
+    ({{ atr|num }}–{{ (atr * 2)|num }}) ligger utanför den normala rörelsen.
+  </p>
+  {% endif %}
+</div>
+
+{% if plan %}
+  {% for blocker in plan.blockers %}
+  <div class="blocker">{{ blocker }}</div>
+  {% endfor %}
+
+  {% if plan.ok %}
+  <div class="card">
+    <h2>Order <span class="sub">{{ 'lång' if plan.direction == 'LONG' else 'kort' }}
+      {{ ticker or 'position' }}</span></h2>
+    <div class="hero">{{ plan.shares }} <span class="muted" style="font-size:20px">aktier</span></div>
+    <div class="plan-out" style="margin-top:18px">
+      <div><div class="k">Positionsvärde</div><div class="v">{{ plan.position_value|kr }}</div></div>
+      <div><div class="k">Risk om stoppen träffas</div>
+           <div class="v neg">{{ plan.risk_actual|kr }}</div>
+           <div class="small muted">budget {{ plan.risk_budget|kr }}</div></div>
+      <div><div class="k">Per aktie till stoppen</div><div class="v">{{ plan.risk_per_share|num }}</div></div>
+      <div><div class="k">Courtage in och ut</div><div class="v muted">{{ plan.fees|kr(2) }}</div></div>
+      <div><div class="k">Nollresultat vid</div><div class="v">{{ plan.breakeven|num }}</div></div>
+    </div>
+
+    {% for warning in plan.warnings %}
+    <p class="note" style="margin-top:16px">{{ warning }}</p>
+    {% endfor %}
+  </div>
+
+  <div class="card">
+    <h2>Målkurser <span class="sub">i R, alltså i den risk du tog</span></h2>
+    <div class="table-wrap"><table>
+      <thead><tr><th class="l">Nivå</th><th>Kurs</th><th>Resultat</th><th class="l">Innebörd</th></tr></thead>
+      <tbody>
+        {% for r, mening in [(1, 'Betalar en förlorad affär av samma storlek'),
+                             (2, 'Bär två förlorade affärer – arbetsnivån för de flesta strategier'),
+                             (3, 'Bär tre förluster; kräver att du låter vinnaren löpa')] %}
+        <tr>
+          <td class="l">{{ r }}R</td>
+          <td>{{ plan.target(r)|num }}</td>
+          <td class="pos">{{ (plan.risk_per_share * r * plan.shares)|kr }}</td>
+          <td class="l muted small">{{ mening }}</td>
+        </tr>
+        {% endfor %}
+        <tr>
+          <td class="l">Stopp</td>
+          <td>{{ plan.stop|num }}</td>
+          <td class="neg">−{{ (plan.risk_per_share * plan.shares)|kr }}</td>
+          <td class="l muted small">Här hade du fel. Flytta den aldrig bortåt.</td>
+        </tr>
+      </tbody>
+    </table></div>
+    <p class="small muted" style="margin:14px 0 0">
+      Med den här risknivån tål kontot {{ (1 / risk_pct)|round(0)|int }} förluster i rad
+      innan det är slut. Det låter mycket – tio i rad händer varje strategi som har
+      50 % träffsäkerhet, ungefär en gång per tusen affärer.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Logga affären</h2>
+    <p class="small muted">Först när den ligger i journalen går det att se om
+      uppställningen faktiskt tjänar pengar.</p>
+    <form class="inline" method="post" action="/journal">
+      <input type="hidden" name="direction" value="{{ plan.direction }}">
+      <input type="hidden" name="entry" value="{{ plan.entry }}">
+      <input type="hidden" name="stop" value="{{ plan.stop }}">
+      <input type="hidden" name="quantity" value="{{ plan.shares }}">
+      <div class="field"><label>Aktie</label>
+        <input name="ticker" value="{{ ticker }}" required></div>
+      <div class="field"><label>Tidpunkt</label>
+        <input name="opened_at" type="datetime-local" value="{{ now }}" required></div>
+      <div class="field"><label>Uppställning</label>
+        <input name="setup" list="setups" placeholder="Öppningsrange">
+        <datalist id="setups">{% for s in setups %}<option value="{{ s }}">{% endfor %}</datalist></div>
+      <div class="field narrow"><label>Courtage in</label>
+        <input name="fees" value="{{ (plan.fees / 2)|num(2) }}" inputmode="decimal"></div>
+      <button type="submit">Spara i journalen</button>
+    </form>
+  </div>
+  {% endif %}
+{% else %}
+<div class="card"><div class="empty">
+  Fyll i ingång och stopp så räknas antalet fram.
+</div></div>
+{% endif %}
+{% endblock %}

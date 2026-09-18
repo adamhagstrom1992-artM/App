@@ -5,17 +5,22 @@ Kör: ./run.sh  (eller uvicorn app.main:app --reload)
 from __future__ import annotations
 
 import os
-from datetime import date
+from datetime import date, datetime
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from . import charts
 from . import format as fmt
 from .db import connect, get_settings, init_db, put_setting, setting_float
 from .market import MarketData, build_provider
+from .market.intraday import INTERVAL_LABEL, INTERVALS, BarFeed, build_bar_provider
 from .services import repo
+from .services import indicators as ind
+from .services import journal as jr
+from .services import risk as rk
 from .services.analysis import BUY, HOLD_OFF, WATCH
 from .services.overview import build_overview, candidates_from
 from .services.planner import build_plan
@@ -29,6 +34,7 @@ templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 conn = connect()
 init_db(conn)
 market = MarketData(provider=build_provider(), conn=conn)
+feed = BarFeed(build_bar_provider(), conn)
 
 
 # --- formatering -----------------------------------------------------------
@@ -39,11 +45,14 @@ templates.env.filters.update(num=fmt.num, kr=fmt.kr, pct=fmt.pct,
 templates.env.globals.update(
     VERDICT_BUY=BUY, VERDICT_WATCH=WATCH, VERDICT_HOLD=HOLD_OFF,
     KIND_LABEL={"BUY": "Köp", "SELL": "Sälj", "DIVIDEND": "Utdelning", "SPLIT": "Split"},
+    INF=float("inf"),
 )
 
 
 def page(request: Request, template: str, **ctx) -> HTMLResponse:
     ctx.setdefault("source", market.source)
+    ctx.setdefault("bar_source", feed.source)
+    ctx.setdefault("delayed", feed.delayed_minutes)
     ctx.setdefault("today", date.today().isoformat())
     ctx["path"] = request.url.path
     return templates.TemplateResponse(request, template, ctx)
@@ -237,6 +246,10 @@ def settings_save(
     courtage_pct: str = Form("0.25"),
     max_courtage_pct_of_order: str = Form("0.5"),
     monthly_budget: str = Form("5000"),
+    account_size: str = Form("100000"),
+    risk_per_trade_pct: str = Form("1"),
+    default_interval: str = Form("5m"),
+    max_intraday_position_pct: str = Form("50"),
 ):
     put_setting(conn, "min_dividend_yield", (as_float(min_dividend_yield, 3) or 0) / 100)
     put_setting(conn, "max_pe", as_float(max_pe, 20) or 20)
@@ -245,6 +258,10 @@ def settings_save(
     put_setting(conn, "courtage_pct", (as_float(courtage_pct, 0.25) or 0) / 100)
     put_setting(conn, "max_courtage_pct_of_order", (as_float(max_courtage_pct_of_order, 0.5) or 0) / 100)
     put_setting(conn, "monthly_budget", as_float(monthly_budget, 5000) or 0)
+    put_setting(conn, "account_size", as_float(account_size, 100_000) or 0)
+    put_setting(conn, "risk_per_trade_pct", (as_float(risk_per_trade_pct, 1) or 0) / 100)
+    put_setting(conn, "default_interval", default_interval if default_interval in INTERVALS else "5m")
+    put_setting(conn, "max_intraday_position_pct", (as_float(max_intraday_position_pct, 50) or 50) / 100)
     return RedirectResponse("/installningar", status_code=303)
 
 
@@ -252,3 +269,145 @@ def settings_save(
 def refresh_quotes(request: Request):
     build_overview(conn, market, refresh=True)
     return back(request, "/")
+
+
+# --- daytrading ------------------------------------------------------------
+
+DEFAULT_SETUPS = ["Öppningsrange", "VWAP-återtag", "Trendfortsättning",
+                  "Utbrott", "Motvals", "Nyhetsdriven"]
+
+
+@app.get("/trading", response_class=HTMLResponse)
+def trading(request: Request, ticker: str = "", interval: str = "", days: int = 2):
+    settings = get_settings(conn)
+    interval = interval if interval in INTERVALS else settings.get("default_interval", "5m")
+    days = max(1, min(days, 10))
+
+    known = repo.tracked_tickers(conn) or [t.ticker for t in repo.list_trades(conn)]
+    ticker = (ticker or (known[0] if known else "VOLV-B.ST")).strip().upper()
+
+    bars = feed.bars(ticker, interval=interval, days=days)
+    closes = [b.close for b in bars]
+    step_minutes = {"1m": 1, "5m": 5, "15m": 15, "60m": 60}.get(interval, 5)
+
+    overlays: dict[str, list] = {}
+    levels: dict[str, float] = {}
+    stats: dict[str, float | None] = {}
+    if bars:
+        overlays["VWAP"] = ind.vwap(bars)
+        if len(closes) >= 20:
+            overlays["EMA 20"] = ind.ema(closes, 20)
+        opening = ind.opening_range(bars, minutes=15, interval_minutes=step_minutes)
+        last = bars[-1]
+        vwap_now = ind.latest(overlays["VWAP"])
+        stats = {
+            "last": last.close,
+            "atr": ind.latest(ind.atr(bars, 14)),
+            "rsi": ind.latest(ind.rsi(closes, 14)),
+            "vwap": vwap_now,
+            "vwap_gap": (last.close - vwap_now) / vwap_now if vwap_now else None,
+            "session_change": None,
+            "or_high": opening[0] if opening else None,
+            "or_low": opening[1] if opening else None,
+        }
+        today = [b for b in bars if b.ts[:10] == last.ts[:10]]
+        if today:
+            stats["session_change"] = (last.close - today[0].open) / today[0].open
+
+    band = ("Öppningsrange", stats["or_low"], stats["or_high"]) if stats.get("or_low") else None
+    chart = charts.candlestick(bars, overlays, levels, band=band) if bars else ""
+    return page(request, "trading.html", ticker=ticker, interval=interval, days=days,
+                bars=bars, chart=chart, stats=stats, levels=band,
+                known=known, intervals=INTERVALS, interval_label=INTERVAL_LABEL,
+                overlay_names=list(overlays))
+
+
+@app.get("/risk", response_class=HTMLResponse)
+def risk_view(request: Request, ticker: str = "", entry: str = "", stop: str = "",
+              direction: str = rk.LONG, account: str = "", risk: str = ""):
+    settings = get_settings(conn)
+    account_size = as_float(account, None) or setting_float(settings, "account_size", 100_000)
+    risk_pct = as_float(risk, None)
+    risk_pct = risk_pct / 100 if risk_pct is not None else setting_float(settings, "risk_per_trade_pct", 0.01)
+    direction = rk.SHORT if str(direction).upper() == rk.SHORT else rk.LONG
+
+    entry_v = as_float(entry, None)
+    stop_v = as_float(stop, None)
+    ticker = ticker.strip().upper()
+
+    atr_now = None
+    if ticker:
+        bars = feed.bars(ticker, interval=settings.get("default_interval", "5m"), days=2)
+        if bars:
+            atr_now = ind.latest(ind.atr(bars, 14))
+            if entry_v is None:
+                entry_v = bars[-1].close
+
+    plan = None
+    if entry_v and stop_v:
+        plan = rk.plan_trade(
+            account_size=account_size, risk_pct=risk_pct, entry=entry_v, stop=stop_v,
+            direction=direction, atr=atr_now,
+            courtage_min=setting_float(settings, "courtage_min", 1),
+            courtage_pct=setting_float(settings, "courtage_pct", 0.0025),
+            max_position_pct=setting_float(settings, "max_intraday_position_pct", 0.5),
+        )
+    return page(request, "risk.html", plan=plan, ticker=ticker, entry=entry_v, stop=stop_v,
+                direction=direction, account_size=account_size, risk_pct=risk_pct,
+                atr=atr_now, setups=repo.trade_setups(conn) or DEFAULT_SETUPS,
+                now=datetime.now().strftime("%Y-%m-%dT%H:%M"))
+
+
+@app.get("/journal", response_class=HTMLResponse)
+def journal_view(request: Request):
+    trades = repo.list_trades(conn)
+    stats = jr.summarize(trades)
+    open_trades = [t for t in trades if t.is_open]
+    return page(
+        request, "journal.html",
+        trades=trades, open_trades=open_trades, stats=stats,
+        by_setup=jr.group_stats(trades, key=lambda t: t.setup or "–"),
+        by_weekday=jr.group_stats(trades, key=lambda t: t.weekday),
+        equity_chart=charts.equity_curve(stats.equity),
+        r_chart=charts.r_distribution(jr.r_histogram(stats.r_values)),
+        setups=repo.trade_setups(conn) or DEFAULT_SETUPS,
+        now=datetime.now().strftime("%Y-%m-%dT%H:%M"),
+    )
+
+
+@app.post("/journal")
+def journal_add(
+    request: Request,
+    ticker: str = Form(...),
+    direction: str = Form(rk.LONG),
+    opened_at: str = Form(...),
+    entry: str = Form(...),
+    stop: str = Form(...),
+    quantity: str = Form(...),
+    setup: str = Form(""),
+    fees: str = Form("0"),
+    note: str = Form(""),
+):
+    repo.add_trade(
+        conn, ticker.strip().upper(),
+        direction=rk.SHORT if direction.upper() == rk.SHORT else rk.LONG,
+        opened_at=opened_at, entry=as_float(entry, 0) or 0, stop=as_float(stop, 0) or 0,
+        quantity=as_float(quantity, 0) or 0, setup=setup.strip(),
+        fees=as_float(fees, 0) or 0, note=note.strip(),
+    )
+    return RedirectResponse("/journal", status_code=303)
+
+
+@app.post("/journal/{trade_id}/stang")
+def journal_close(request: Request, trade_id: int, exit_price: str = Form(...),
+                  closed_at: str = Form(...), fees: str = Form("0"), note: str = Form("")):
+    repo.close_trade(conn, trade_id, exit_price=as_float(exit_price, 0) or 0,
+                     closed_at=closed_at, extra_fees=as_float(fees, 0) or 0,
+                     note=note.strip() or None)
+    return RedirectResponse("/journal", status_code=303)
+
+
+@app.post("/journal/{trade_id}/ta-bort")
+def journal_delete(request: Request, trade_id: int):
+    repo.delete_trade(conn, trade_id)
+    return RedirectResponse("/journal", status_code=303)

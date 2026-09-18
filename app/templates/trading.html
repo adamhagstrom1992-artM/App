@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}{{ ticker }} – graf – Aktiekoll{% endblock %}
+{% block content %}
+<h1>Intradagsgraf</h1>
+<p class="lead">Staplar, VWAP och öppningsrange för att studera hur en uppställning
+faktiskt betedde sig – och för att sätta stoppen på ett avstånd som marknadens brus
+inte råkar träffa.</p>
+
+{% if delayed %}
+<p><span class="delayed">⏱ Kursdata är fördröjd ~{{ delayed }} minuter</span></p>
+<p class="note" style="margin:10px 0 20px">
+  Fördröjningen gör grafen användbar för att <em>studera och utvärdera</em>, inte för att
+  handla på i realtid. Ska du fatta beslut sekund för sekund behöver du en betald
+  realtidsfeed – din mäklares egen app är det närmaste till hands.
+</p>
+{% elif bar_source == 'demo' %}
+<p class="note" style="margin:10px 0 20px">
+  Staplarna nedan är <strong>syntetiskt brus</strong>, inte marknad. Demoläget finns för att
+  graferna ska gå att bygga och testa utan nätverk – dra inga slutsatser av formerna.
+</p>
+{% endif %}
+
+<div class="card">
+  <form class="inline" method="get" action="/trading">
+    <div class="field"><label>Aktie</label>
+      <input name="ticker" value="{{ ticker }}" list="kanda" placeholder="VOLV-B.ST">
+      <datalist id="kanda">{% for t in known %}<option value="{{ t }}">{% endfor %}</datalist>
+    </div>
+    <div class="field narrow"><label>Dagar</label>
+      <input name="days" value="{{ days }}" inputmode="numeric"></div>
+    <input type="hidden" name="interval" value="{{ interval }}">
+    <button type="submit">Visa</button>
+  </form>
+  <div class="chips" style="margin-top:14px">
+    {% for iv in intervals %}
+    <a href="/trading?ticker={{ ticker }}&interval={{ iv }}&days={{ days }}"
+       class="{{ 'active' if iv == interval }}">{{ interval_label[iv] }}</a>
+    {% endfor %}
+  </div>
+</div>
+
+{% if bars %}
+<div class="grid">
+  <div class="stat">
+    <div class="k">Senaste stängning</div>
+    <div class="v">{{ stats.last|num }}</div>
+    {% if stats.session_change is not none %}
+    <div class="small {{ 'pos' if stats.session_change >= 0 else 'neg' }}">
+      {{ stats.session_change|spct }} i dag</div>
+    {% endif %}
+  </div>
+  <div class="stat">
+    <div class="k">ATR (14)</div>
+    <div class="v">{{ stats.atr|num }}</div>
+    <div class="small muted">normal rörelse per stapel</div>
+  </div>
+  <div class="stat">
+    <div class="k">RSI (14)</div>
+    <div class="v">{{ stats.rsi|num(0) }}</div>
+    <div class="small muted">
+      {% if stats.rsi and stats.rsi >= 70 %}överköpt område
+      {% elif stats.rsi and stats.rsi <= 30 %}översålt område
+      {% else %}neutralt område{% endif %}</div>
+  </div>
+  <div class="stat">
+    <div class="k">Mot VWAP</div>
+    <div class="v {{ 'pos' if stats.vwap_gap and stats.vwap_gap >= 0 else 'neg' }}">
+      {{ stats.vwap_gap|spct }}</div>
+    <div class="small muted">VWAP {{ stats.vwap|num }}</div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:20px">
+  <h2>{{ ticker }} <span class="sub">{{ interval_label[interval] }} · {{ bars|length }} staplar</span></h2>
+  {{ chart|safe }}
+  <div class="legend">
+    <span><i class="box hollow"></i> stigande stapel</span>
+    <span><i class="box" style="background:var(--chart-down)"></i> fallande stapel</span>
+    {% for name in overlay_names %}
+    <span><i style="background:var(--chart-s{{ loop.index }})"></i> {{ name }}</span>
+    {% endfor %}
+    {% if levels %}<span><i style="background:var(--muted)"></i> öppningsrange</span>{% endif %}
+  </div>
+</div>
+
+{% if stats.or_low %}
+<div class="card">
+  <h2>Ta med till riskberäknaren</h2>
+  <p class="small muted">Öppningsrangen är ett rimligt ställe att lägga stoppen bakom –
+    innanför den är rörelsen fortfarande brus.</p>
+  <div class="chips">
+    <a href="/risk?ticker={{ ticker }}&entry={{ stats.last }}&stop={{ stats.or_low }}&direction=LONG">
+      Lång med stopp under rangen ({{ stats.or_low|num }})</a>
+    <a href="/risk?ticker={{ ticker }}&entry={{ stats.last }}&stop={{ stats.or_high }}&direction=SHORT">
+      Kort med stopp över rangen ({{ stats.or_high|num }})</a>
+  </div>
+</div>
+{% endif %}
+
+{% else %}
+<div class="card"><div class="empty">
+  Inga staplar för <strong>{{ ticker }}</strong>. Kontrollera tickern – Stockholmsbörsen
+  skrivs med ändelsen <code>.ST</code>. Intradagsdata finns bara ett begränsat antal dagar bakåt.
+</div></div>
+{% endif %}
+{% endblock %}

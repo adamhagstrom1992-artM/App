@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}Journal – Aktiekoll{% endblock %}
+{% macro statline(s) %}
+  <td>{{ s.trades }}</td>
+  <td>{{ s.win_rate|pct(0) }}</td>
+  <td class="{{ 'pos' if s.expectancy_r and s.expectancy_r >= 0.005
+                else ('neg' if s.expectancy_r and s.expectancy_r <= -0.005 else 'muted') }}">
+    {{ s.expectancy_r|num(2) }}R</td>
+  <td class="{{ 'pos' if s.total_pl >= 0 else 'neg' }}">{{ s.total_pl|kr }}</td>
+{% endmacro %}
+{% block content %}
+<h1>Journal</h1>
+<p class="lead">Det som skiljer en strategi från en vana är att den går att mäta. Allt här
+räknas i R – resultatet delat med den risk affären tog – eftersom det är det enda som gör
+en affär på 500 kr jämförbar med en på 5 000 kr.</p>
+
+{% if stats.trades %}
+<div class="card">
+  <h2>Resultat <span class="sub">{{ stats.trades }} avslutade affärer</span></h2>
+  <div class="hero {{ 'pos' if stats.total_pl >= 0 else 'neg' }}">{{ stats.total_pl|kr }}</div>
+  <div class="small muted">efter {{ stats.total_fees|kr }} i courtage</div>
+
+  <div class="plan-out" style="margin-top:22px">
+    <div><div class="k">Träffsäkerhet</div><div class="v">{{ stats.win_rate|pct(0) }}</div>
+         <div class="small muted">{{ stats.wins }} vinst / {{ stats.losses }} förlust</div></div>
+    <div><div class="k">Expectancy</div>
+         <div class="v {{ 'pos' if stats.expectancy_r and stats.expectancy_r >= 0.005
+                         else ('neg' if stats.expectancy_r and stats.expectancy_r <= -0.005 else '') }}">
+           {{ stats.expectancy_r|num(2) }}R</div>
+         <div class="small muted">per affär i snitt</div></div>
+    <div><div class="k">Profit factor</div>
+         <div class="v">{% if stats.profit_factor == none %}–
+           {% elif stats.profit_factor == INF %}∞
+           {% else %}{{ stats.profit_factor|num(2) }}{% endif %}</div>
+         <div class="small muted">vunnet ÷ förlorat</div></div>
+    <div><div class="k">Största fall</div><div class="v neg">{{ stats.max_drawdown|kr }}</div>
+         <div class="small muted">från toppen</div></div>
+    <div><div class="k">Längsta förlustsvit</div><div class="v">{{ stats.longest_loss_streak }}</div>
+         <div class="small muted">i rad</div></div>
+  </div>
+
+  {% if stats.expectancy_r is not none and stats.expectancy_r <= 0 %}
+  <p class="note" style="margin-top:18px">
+    Expectancy under noll betyder att strategin, så som den ser ut nu, kostar pengar per
+    affär. Fler affärer gör det värre, inte bättre. Titta i tabellen per uppställning –
+    ofta är det en enda av dem som drar ned hela resultatet.
+  </p>
+  {% endif %}
+</div>
+
+<div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(330px, 1fr))">
+  <div class="card" style="margin:0">
+    <h2>Ackumulerat resultat</h2>
+    {{ equity_chart|safe }}
+  </div>
+  <div class="card" style="margin:0">
+    <h2>Fördelning av utfall</h2>
+    {{ r_chart|safe }}
+    <div class="legend">
+      <span><i class="box" style="background:var(--chart-down)"></i> förlust</span>
+      <span><i class="box" style="background:var(--chart-up)"></i> vinst</span>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-top:20px">
+  <h2>Per uppställning <span class="sub">sämst sist</span></h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th class="l">Uppställning</th><th>Affärer</th><th>Träff</th>
+      <th>Expectancy</th><th>Resultat</th></tr></thead>
+    <tbody>
+      {% for label, s in by_setup %}
+      <tr><td class="l">{{ label }}</td>{{ statline(s) }}</tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+
+<div class="card">
+  <h2>Per veckodag</h2>
+  <p class="small muted" style="margin:-4px 0 12px">
+    Expectancy räknas på kurserna, resultatet i kronor är efter courtage. En rad som står
+    på 0,00R men minus i kronor gick alltså jämnt ut mot marknaden och förlorade på avgifter
+    – det är oftast ett tecken på att affärerna är för små för courtaget.
+  </p>
+  <div class="table-wrap"><table>
+    <thead><tr><th class="l">Dag</th><th>Affärer</th><th>Träff</th>
+      <th>Expectancy</th><th>Resultat</th></tr></thead>
+    <tbody>
+      {% for label, s in by_weekday %}
+      <tr><td class="l">{{ label }}</td>{{ statline(s) }}</tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</div>
+{% endif %}
+
+{% if open_trades %}
+<div class="card">
+  <h2>Öppna affärer <span class="sub">{{ open_trades|length }} st</span></h2>
+  {% for t in open_trades %}
+  <form method="post" action="/journal/{{ t.id }}/stang" class="inline"
+        style="padding:12px 0; border-bottom:1px solid var(--line)">
+    <div class="field">
+      <label>{{ t.ticker }} · {{ 'lång' if t.direction == 'LONG' else 'kort' }}</label>
+      <div class="small muted" style="padding-top:6px">
+        {{ t.quantity|num(0) }} st à {{ t.entry|num }}, stopp {{ t.stop|num }}
+        {% if t.setup %} · {{ t.setup }}{% endif %}
+      </div>
+    </div>
+    <div class="field narrow"><label>Utgång</label>
+      <input name="exit_price" inputmode="decimal" required></div>
+    <div class="field"><label>Tidpunkt</label>
+      <input name="closed_at" type="datetime-local" value="{{ now }}" required></div>
+    <div class="field narrow"><label>Courtage ut</label>
+      <input name="fees" value="0" inputmode="decimal"></div>
+    <div class="field"><label>Notering</label>
+      <input name="note" placeholder="vad gick bra eller fel"></div>
+    <button type="submit">Stäng</button>
+  </form>
+  {% endfor %}
+</div>
+{% endif %}
+
+<div class="card">
+  <h2>Ny affär</h2>
+  <form class="inline" method="post" action="/journal">
+    <div class="field narrow"><label>Riktning</label>
+      <select name="direction"><option value="LONG">Lång</option><option value="SHORT">Kort</option></select></div>
+    <div class="field"><label>Aktie</label><input name="ticker" required placeholder="VOLV-B.ST"></div>
+    <div class="field"><label>Tidpunkt</label>
+      <input name="opened_at" type="datetime-local" value="{{ now }}" required></div>
+    <div class="field narrow"><label>Ingång</label><input name="entry" inputmode="decimal" required></div>
+    <div class="field narrow"><label>Stopp</label><input name="stop" inputmode="decimal" required></div>
+    <div class="field narrow"><label>Antal</label><input name="quantity" inputmode="decimal" required></div>
+    <div class="field"><label>Uppställning</label>
+      <input name="setup" list="setups2" placeholder="Öppningsrange">
+      <datalist id="setups2">{% for s in setups %}<option value="{{ s }}">{% endfor %}</datalist></div>
+    <div class="field narrow"><label>Courtage</label><input name="fees" value="0" inputmode="decimal"></div>
+    <button type="submit">Spara</button>
+  </form>
+  <p class="small muted" style="margin:12px 0 0">
+    Stoppen du anger är den du <em>planerade vid ingången</em>. Den är nämnaren i R och får
+    inte skrivas om i efterhand – gör du det slutar statistiken betyda något.
+  </p>
+</div>
+
+<div class="card">
+  <h2>Alla affärer <span class="sub">{{ trades|length }} st</span></h2>
+  {% if trades %}
+  <div class="table-wrap"><table>
+    <thead><tr>
+      <th class="l">Öppnad</th><th class="l">Aktie</th><th class="l">Riktning</th>
+      <th class="l">Uppställning</th><th>Antal</th><th>Ingång</th><th>Stopp</th>
+      <th>Utgång</th><th>R</th><th>Resultat</th><th>Tid</th><th></th>
+    </tr></thead>
+    <tbody>
+      {% for t in trades %}
+      <tr>
+        <td class="l small">{{ t.opened_at|replace('T', ' ') }}</td>
+        <td class="l"><a href="/trading?ticker={{ t.ticker }}">{{ t.ticker }}</a></td>
+        <td class="l">{{ 'Lång' if t.direction == 'LONG' else 'Kort' }}</td>
+        <td class="l muted">{{ t.setup or '–' }}</td>
+        <td>{{ t.quantity|num(0) }}</td>
+        <td>{{ t.entry|num }}</td>
+        <td class="muted">{{ t.stop|num }}</td>
+        <td>{{ t.exit|num if t.exit else '–' }}</td>
+        <td class="{{ 'pos' if t.r and t.r > 0 else ('neg' if t.r and t.r < 0 else '') }}">
+          {% if t.r is not none %}{{ t.r|num(2) }}R{% else %}<span class="tag tag-watch">öppen</span>{% endif %}</td>
+        <td class="{{ 'pos' if t.pl and t.pl > 0 else ('neg' if t.pl and t.pl < 0 else '') }}">
+          {{ t.pl|kr if t.pl is not none else '–' }}</td>
+        <td class="muted small">{{ t.held_minutes|num(0) ~ ' min' if t.held_minutes else '–' }}</td>
+        <td><form method="post" action="/journal/{{ t.id }}/ta-bort" class="row-actions">
+          <button class="link" type="submit">Ta bort</button></form></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <div class="empty">Inga affärer loggade än. Börja med <a href="/risk">riskberäknaren</a>.</div>
+  {% endif %}
+</div>
+{% endblock %}

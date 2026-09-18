@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Aktiekoll{% endblock %}</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><rect width='16' height='16' rx='3' fill='%230f1216'/><path d='M3 11l3-4 3 2 4-6' stroke='%234d9fff' stroke-width='2' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>">
   <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
@@ -16,6 +17,11 @@
       <a href="/portfolj" class="{{ 'active' if path.startswith('/portfolj') }}">Portfölj</a>
       <a href="/plan" class="{{ 'active' if path.startswith('/plan') }}">Köpplan</a>
       <a href="/transaktioner" class="{{ 'active' if path.startswith('/transaktioner') }}">Transaktioner</a>
+      <b class="nav-split" aria-hidden="true"></b>
+      <a href="/trading" class="{{ 'active' if path.startswith('/trading') }}">Graf</a>
+      <a href="/risk" class="{{ 'active' if path.startswith('/risk') }}">Risk</a>
+      <a href="/journal" class="{{ 'active' if path.startswith('/journal') }}">Journal</a>
+      <b class="nav-split" aria-hidden="true"></b>
       <a href="/installningar" class="{{ 'active' if path.startswith('/installningar') }}">Inställningar</a>
     </nav>
     <form method="post" action="/uppdatera-kurser">
@@ -41,5 +47,6 @@
     innan du handlar.
   </p>
 </main>
+<script src="/static/app.js" defer></script>
 </body>
 </html>

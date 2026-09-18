@@ -40,6 +40,30 @@
     </p>
   </div>
 
+  <div class="card">
+    <h2>Daytrading</h2>
+    <div class="inline">
+      <div class="field"><label>Kontostorlek (kr)</label>
+        <input name="account_size" inputmode="decimal" value="{{ settings.account_size }}"></div>
+      <div class="field"><label>Risk per affär (%)</label>
+        <input name="risk_per_trade_pct" inputmode="decimal"
+               value="{{ (settings.risk_per_trade_pct|float * 100)|round(2) }}"></div>
+      <div class="field"><label>Största intradagsposition (%)</label>
+        <input name="max_intraday_position_pct" inputmode="decimal"
+               value="{{ (settings.max_intraday_position_pct|float * 100)|round(1) }}"></div>
+      <div class="field"><label>Förvald upplösning</label>
+        <select name="default_interval">
+          {% for iv, namn in [('1m','1 minut'), ('5m','5 minuter'), ('15m','15 minuter'), ('60m','1 timme')] %}
+          <option value="{{ iv }}" {{ 'selected' if settings.default_interval == iv }}>{{ namn }}</option>
+          {% endfor %}
+        </select></div>
+    </div>
+    <p class="small muted" style="margin:12px 0 0">
+      1 % per affär är den gängse utgångspunkten och innebär att hundra förluster i rad
+      krävs för att tömma kontot. Över 2 % blir en normal förlustsvit svår att sitta igenom.
+    </p>
+  </div>
+
   <button type="submit">Spara inställningar</button>
 </form>
 {% endblock %}

@@ -99,3 +99,60 @@ def test_kommatecken_som_decimaltecken_accepteras():
     client.post("/bevakning", data={"ticker": "TELIA.ST", "target_weight": "7,5",
                                     "max_buy_price": "29,80", "thesis": ""})
     assert "TELIA.ST" in client.get("/bevakning").text
+
+
+# --- daytrading-vyerna ------------------------------------------------------
+
+@pytest.mark.parametrize("path", ["/trading", "/risk", "/journal"])
+def test_daytradingvyerna_svarar(path):
+    r = client.get(path)
+    assert r.status_code == 200
+    assert "Aktiekoll" in r.text
+
+
+def test_grafen_ritas_som_svg_med_staplar():
+    body = client.get("/trading?ticker=VOLV-B.ST&interval=5m&days=2").text
+    assert "<svg" in body and 'data-chart="candles"' in body
+    assert "VWAP" in body
+    assert "stigande stapel" in body           # teckenförklaringen finns
+
+
+def test_grafvyn_flaggar_att_datat_inte_ar_realtid():
+    body = client.get("/trading").text
+    assert "syntetiskt brus" in body or "fördröjd" in body
+
+
+def test_riskberaknaren_ger_antal_aktier_ur_risken():
+    body = client.get("/risk?entry=100&stop=98&account=100000&risk=1").text
+    assert "500" in body                       # 1000 kr risk / 2 kr per aktie
+    assert "Målkurser" in body
+
+
+def test_riskberaknaren_vagrar_stopp_pa_fel_sida():
+    body = client.get("/risk?entry=100&stop=105&account=100000&risk=1").text
+    assert "stoppen ligga under ingången" in body
+
+
+def test_journalen_raknar_r_och_resultat_for_en_avslutad_affar():
+    client.post("/journal", data={"ticker": "ERIC-B.ST", "direction": "LONG",
+                                  "opened_at": "2026-09-14T09:35", "entry": "80",
+                                  "stop": "78", "quantity": "100", "setup": "Utbrott",
+                                  "fees": "39"})
+    import re
+    ids = re.findall(r"/journal/(\d+)/stang", client.get("/journal").text)
+    assert ids, "affären ska ligga som öppen"
+    client.post(f"/journal/{ids[-1]}/stang", data={"exit_price": "86",
+                                                   "closed_at": "2026-09-14T10:40",
+                                                   "fees": "39", "note": "testaffär"})
+    body = client.get("/journal").text
+    assert "3,00R" in body                     # (86-80)/(80-78)
+    assert "Utbrott" in body
+    assert "Expectancy" in body
+
+
+def test_affar_gar_att_ta_bort_ur_journalen():
+    import re
+    before = re.findall(r"/journal/(\d+)/ta-bort", client.get("/journal").text)
+    client.post(f"/journal/{before[0]}/ta-bort", follow_redirects=False)
+    after = re.findall(r"/journal/(\d+)/ta-bort", client.get("/journal").text)
+    assert len(after) == len(before) - 1

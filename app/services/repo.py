@@ -5,6 +5,7 @@ import sqlite3
 from datetime import date
 
 from .holdings import Transaction
+from .journal import Trade
 
 
 def upsert_instrument(conn: sqlite3.Connection, ticker: str, name: str = "",
@@ -94,5 +95,70 @@ def tracked_tickers(conn: sqlite3.Connection) -> list[str]:
     """Allt appen behover kurser for: bevakat plus allt du nagonsin agt."""
     rows = conn.execute(
         "SELECT ticker FROM watchlist UNION SELECT ticker FROM txn ORDER BY 1"
+    ).fetchall()
+    return [r[0] for r in rows]
+
+
+# --- affarer (daytrading-journalen) ---------------------------------------
+
+def _trade_from_row(r: sqlite3.Row) -> Trade:
+    return Trade(id=r["id"], ticker=r["ticker"], direction=r["direction"], setup=r["setup"],
+                 opened_at=r["opened_at"], closed_at=r["closed_at"], entry=r["entry"],
+                 stop=r["stop"], exit=r["exit"], quantity=r["quantity"], fees=r["fees"],
+                 note=r["note"])
+
+
+def list_trades(conn: sqlite3.Connection, ticker: str | None = None) -> list[Trade]:
+    sql = "SELECT * FROM trade"
+    args: tuple = ()
+    if ticker:
+        sql += " WHERE ticker = ?"
+        args = (ticker.upper(),)
+    sql += " ORDER BY opened_at DESC, id DESC"
+    return [_trade_from_row(r) for r in conn.execute(sql, args).fetchall()]
+
+
+def get_trade(conn: sqlite3.Connection, trade_id: int) -> Trade | None:
+    row = conn.execute("SELECT * FROM trade WHERE id = ?", (trade_id,)).fetchone()
+    return _trade_from_row(row) if row else None
+
+
+def add_trade(conn: sqlite3.Connection, ticker: str, direction: str, opened_at: str,
+              entry: float, stop: float, quantity: float, setup: str = "",
+              fees: float = 0.0, note: str = "", closed_at: str | None = None,
+              exit_price: float | None = None) -> int:
+    cur = conn.execute(
+        "INSERT INTO trade (ticker, direction, setup, opened_at, closed_at, entry, stop, "
+        "exit, quantity, fees, note) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (ticker.upper(), direction.upper(), setup, opened_at, closed_at, entry, stop,
+         exit_price, quantity, fees, note),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def close_trade(conn: sqlite3.Connection, trade_id: int, exit_price: float,
+                closed_at: str, extra_fees: float = 0.0, note: str | None = None) -> None:
+    """Stanger en oppen affar. Utgangscourtaget laggs till det som redan bokats."""
+    if note is None:
+        conn.execute("UPDATE trade SET exit = ?, closed_at = ?, fees = fees + ? WHERE id = ?",
+                     (exit_price, closed_at, extra_fees, trade_id))
+    else:
+        conn.execute(
+            "UPDATE trade SET exit = ?, closed_at = ?, fees = fees + ?, "
+            "note = TRIM(note || ' ' || ?) WHERE id = ?",
+            (exit_price, closed_at, extra_fees, note, trade_id))
+    conn.commit()
+
+
+def delete_trade(conn: sqlite3.Connection, trade_id: int) -> None:
+    conn.execute("DELETE FROM trade WHERE id = ?", (trade_id,))
+    conn.commit()
+
+
+def trade_setups(conn: sqlite3.Connection) -> list[str]:
+    """Tidigare anvanda setup-namn, for att slippa stava olika varje gang."""
+    rows = conn.execute(
+        "SELECT DISTINCT setup FROM trade WHERE setup <> '' ORDER BY setup"
     ).fetchall()
     return [r[0] for r in rows]

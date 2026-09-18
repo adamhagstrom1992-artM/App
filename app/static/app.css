@@ -6,8 +6,22 @@
   --text: #e6edf3;
   --muted: #8b98a5;
   --accent: #4d9fff;
+  /* Text: WCAG kraver 4,5:1 for siffror, sa de ljusare stegen stannar har. */
   --pos: #3fb950;
   --neg: #f85149;
+
+  /* Grafmarkeringar: validerade steg, kravet ar 3:1 mot ytan de ritas pa.
+     Upp/ned bars aven av formen - ihalig stapel upp, fylld ned - eftersom
+     gront mot rott ar praktiskt taget oskiljbart vid deuteranopi. */
+  --chart-surface: #161b22;
+  --chart-up: #0ca30c;
+  --chart-down: #d03b3b;
+  --chart-s1: #3987e5;
+  --chart-s2: #d95926;
+  --chart-s3: #199e70;
+  --chart-grid: #222932;
+  --chart-axis: #39414d;
+  --chart-ink-muted: #8b98a5;
   --warn: #d29922;
   --radius: 10px;
 }
@@ -146,3 +160,51 @@ pre.plan { background: var(--bg); border: 1px solid var(--line); border-radius: 
 
 tfoot th { text-transform: none; letter-spacing: 0; font-size: 14px; color: var(--text); font-weight: 600; }
 tfoot tr th { border-top: 1px solid var(--line); border-bottom: none; }
+
+/* --- grafer ------------------------------------------------------------- */
+.chart-wrap { position: relative; margin: 4px 0 2px; }
+.chart { display: block; overflow: visible; }
+.chart-tick { fill: var(--chart-ink-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart-label { fill: var(--text); font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.chart-hover .crosshair { opacity: 0; }
+.chart-wrap.is-hovering .chart-hover .crosshair { opacity: 1; }
+
+.chart-tip {
+  position: absolute; pointer-events: none; z-index: 5;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+  padding: 8px 10px; font-size: 12.5px; line-height: 1.5; white-space: nowrap;
+  box-shadow: 0 6px 20px rgba(0,0,0,.45); font-variant-numeric: tabular-nums;
+}
+.chart-tip b { font-weight: 600; }
+.chart-tip dl { display: grid; grid-template-columns: auto auto; gap: 1px 12px; margin: 5px 0 0; }
+.chart-tip dt { color: var(--muted); }
+.chart-tip dd { margin: 0; text-align: right; }
+
+.legend { display: flex; gap: 16px; flex-wrap: wrap; margin: 10px 0 0; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 7px; }
+.legend i { width: 14px; height: 2px; border-radius: 2px; flex: none; }
+.legend i.box { height: 11px; width: 8px; border-radius: 1px; }
+.legend i.hollow { background: transparent !important; border: 1px solid var(--chart-up); }
+
+.delayed {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(210,153,34,.12); border: 1px solid rgba(210,153,34,.35);
+  color: #e8c468; border-radius: 99px; padding: 3px 11px; font-size: 12.5px; font-weight: 500;
+}
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chips a {
+  padding: 5px 11px; border-radius: 99px; border: 1px solid var(--line);
+  color: var(--muted); font-size: 13px;
+}
+.chips a.active { background: var(--panel-2); color: var(--text); border-color: var(--muted); }
+.chips a:hover { text-decoration: none; color: var(--text); }
+
+.plan-out { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.plan-out .k { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .5px; }
+.plan-out .v { font-size: 20px; font-weight: 650; margin-top: 3px; font-variant-numeric: tabular-nums; }
+.hero { font-size: 46px; font-weight: 680; line-height: 1.05; letter-spacing: -1px; }
+.note { border-left: 2px solid var(--line); padding-left: 12px; color: var(--muted); font-size: 13px; }
+.blocker { background: rgba(208,59,59,.12); border: 1px solid rgba(208,59,59,.4); color: #f0a3a3;
+           padding: 10px 13px; border-radius: var(--radius); margin-bottom: 12px; font-size: 14px; }
+
+.nav-split { width: 1px; height: 18px; background: var(--line); flex: none; align-self: center; margin: 0 4px; }
